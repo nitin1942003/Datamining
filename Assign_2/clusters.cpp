@@ -3,156 +3,99 @@
 #include <fstream>
 #include <algorithm>
 #include <cmath>
-#include <memory>
-
 using namespace std;
 
 // representation of point;
 // x,y - coordinates on XY
 // cluster - assigned cluster, by default -1(not assigned)
-struct point
-{
+struct point{
     double x, y;
     int cluster = -1;
 };
 
-int main()
-{
-    vector<point> init; // vector of points
-    unsigned int k;     // k - number of clusters
-    double epsilon;     // threshold for stopping condition
-    string filename;    // name of input file
-
-    cin >> k >> epsilon >> filename; // input
+int main(){
+    int k;
+    double epsilon;
+    string filename;
+    cin >> k >> epsilon >> filename;
+    
+    vector<point> points;
     ifstream file(filename);
-
-    // reading coordinates of points
-    while (!file.eof())
-    {
-        point tmp;
-        file >> tmp.x >> tmp.y;
-        init.push_back(tmp);
-    }
+    point tmp;
+    while (file >> tmp.x >> tmp.y) points.push_back(tmp);
     file.close();
 
-    // Randomly select k unique points from the input as initial centers
-    vector<point> centers(k);
+    vector<point> centers(k), prev_centers(k);
     vector<int> chosen_indices;
-    while (chosen_indices.size() < k)
-    {
-        int rand_index = rand() % init.size(); // Choose a random index
-        if (find(chosen_indices.begin(), chosen_indices.end(), rand_index) == chosen_indices.end())
-        {
-            centers[chosen_indices.size()] = init[rand_index]; // Add the point as a center
-            chosen_indices.push_back(rand_index);
+    while (chosen_indices.size() < k) {
+        int idx = rand() % points.size();
+        if (find(chosen_indices.begin(), chosen_indices.end(), idx) == chosen_indices.end()) {
+            centers[chosen_indices.size()] = points[idx];
+            chosen_indices.push_back(idx);
         }
     }
 
-    vector<point> prev_centers(k); // store previous centers
-
-    int itrations = 0;
     ofstream ofile("out.txt");
+    ofile << "Initial cluster centers:\n";
+    for (int i = 0; i < k; i++)
+        ofile << "Cluster " << i + 1 << " mean: (" << centers[i].x << ", " << centers[i].y << ")\n\n";
 
-    // Initial random points taken 
-    ofile << "Random points selected from data as mean of clusters initially" << endl;
-    for (unsigned int i = 0; i < k; i++)
-    {
-        ofile << "Cluster " << i + 1 << " mean: ";
-        ofile << "(" << centers[i].x << ", " << centers[i].y <<")";
-        ofile << "\n";
-    }
-    ofile << "\n";
-
-    // loop until the difference between previous and current centers is less than epsilon
-    while (true)
-    {
-        itrations++;
-
-        // calculate distance from point to centers for every point
-        for (unsigned int j = 0; j < init.size(); j++)
-        {
-            double *dists = new double[k];
-            for (unsigned int p = 0; p < k; p++)
-            {
-                double a = init[j].y - centers[p].y;    // length in y-axis
-                double b = init[j].x - centers[p].x;    // length in x-axis
-                dists[p] = sqrt(pow(a, 2) + pow(b, 2)); // distance from point to center
+    int iterations = 0;
+    while (true) {
+        iterations++;
+        prev_centers = centers;
+        
+        // Assign points to clusters
+        for (auto& p : points) {
+            double min_dist = INFINITY;
+            for (int i = 0; i < k; i++) {
+                double dist = hypot(p.x - centers[i].x, p.y - centers[i].y);
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    p.cluster = i;
+                }
             }
-            // assign cluster with closest center
-            init[j].cluster = min_element(dists, dists + k) - dists;
-            delete[] dists;
         }
 
-        // calculating new centers
+        // Calculate new centers
         vector<double> sum_x(k, 0), sum_y(k, 0);
         vector<int> count(k, 0);
-
-        for (unsigned int f = 0; f < init.size(); f++)
-        {
-            sum_x[init[f].cluster] += init[f].x;
-            sum_y[init[f].cluster] += init[f].y;
-            count[init[f].cluster]++;
+        for (const auto& p : points) {
+            sum_x[p.cluster] += p.x;
+            sum_y[p.cluster] += p.y;
+            count[p.cluster]++;
         }
-
-        // set new centers to average coordinate of points in cluster
-        for (unsigned int f = 0; f < k; f++)
-        {
-            if (count[f] > 0)
-            {
-                centers[f].x = sum_x[f] / count[f];
-                centers[f].y = sum_y[f] / count[f];
+        for (int i = 0; i < k; i++) {
+            if (count[i] > 0) {
+                centers[i].x = sum_x[i] / count[i];
+                centers[i].y = sum_y[i] / count[i];
             }
         }
 
-        // check for convergence: difference between previous and current centers
-        bool converged = true;
-        for (unsigned int f = 0; f < k; f++)
-        {
-            double dist = sqrt(pow(centers[f].x - prev_centers[f].x, 2) +
-                               pow(centers[f].y - prev_centers[f].y, 2));
-            if (dist >= epsilon)
-            {
-                converged = false;
-            }
-        }
-
-        vector<vector<point>> clusters(k); // Create k clusters
-        for (unsigned int i = 0; i < init.size(); i++)
-        {
-            clusters[init[i].cluster].push_back(init[i]);
-        }
-
-        ofile << "Itration: "<< itrations << endl;
-        // Write points grouped by clusters
-        for (unsigned int i = 0; i < k; i++)
-        {
+        // Output current state
+        ofile << "Iteration: " << iterations << "\n";
+        vector<vector<point>> clusters(k);
+        for (const auto& p : points) clusters[p.cluster].push_back(p);
+        
+        for (int i = 0; i < k; i++) {
             ofile << "Cluster " << i + 1 << ": ";
-            for (unsigned int j = 0; j < clusters[i].size(); j++)
-            {
-                ofile << "(" << clusters[i][j].x << "," << clusters[i][j].y << ") ";
+            for (const auto& p : clusters[i])
+                ofile << "(" << p.x << "," << p.y << ") ";
+            ofile << "\n";
+        }
+        ofile << "\n";
+
+        // Check convergence
+        bool converged = true;
+        for (int i = 0; i < k; i++) {
+            if (hypot(centers[i].x - prev_centers[i].x, centers[i].y - prev_centers[i].y) >= epsilon) {
+                converged = false;
+                break;
             }
-            ofile << "\n";
         }
-        ofile << "\n";
-
-        //Mean of clusters
-        for (unsigned int i = 0; i < k; i++)
-        {
-            ofile << "Cluster " << i + 1 << " mean: ";
-            ofile << "(" << centers[i].x << ", " << centers[i].y <<")";
-            ofile << "\n";
-        }
-        ofile << "\n";
-
-        // break if all centers converge within epsilon
-        if (converged)
-        {
-            break;
-        }
-
-        // update previous centers
-        prev_centers = centers;
+        if (converged) break;
     }
 
     ofile.close();
+    return 0;
 }
